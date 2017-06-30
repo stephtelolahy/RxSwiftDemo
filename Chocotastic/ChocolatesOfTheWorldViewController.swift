@@ -28,8 +28,8 @@ class ChocolatesOfTheWorldViewController: UIViewController {
   
   @IBOutlet private var cartButton: UIBarButtonItem!
   @IBOutlet private var tableView: UITableView!
-  let europeanChocolates = Chocolate.ofEurope
   
+  let europeanChocolates = Observable.just(Chocolate.ofEurope)
   let disposeBag = DisposeBag()
   
   //MARK: View Lifecycle
@@ -37,11 +37,9 @@ class ChocolatesOfTheWorldViewController: UIViewController {
   override func viewDidLoad() {
     super.viewDidLoad()
     title = "Chocolate!!!"
-
-    tableView.dataSource = self
-    tableView.delegate = self
-    
     self.setupCartObserver()
+    self.setupCellConfiguration()
+    self.setupCellTapHandling()
   }
   
   //MARK: Rx Setup 
@@ -54,45 +52,34 @@ class ChocolatesOfTheWorldViewController: UIViewController {
       })
       .addDisposableTo(disposeBag)
   }
-}
-
-// MARK: - Table view data source
-extension ChocolatesOfTheWorldViewController: UITableViewDataSource {
-
-  func numberOfSections(in tableView: UITableView) -> Int {
-    return 1
+  
+  private func setupCellConfiguration() {
+    europeanChocolates
+      .bind(to:tableView
+        .rx
+        .items(cellIdentifier: ChocolateCell.Identifier,
+               cellType: ChocolateCell.self)) {
+                row, chocolate, cell in
+                cell.configureWithChocolate(chocolate: chocolate)
+      }
+      .addDisposableTo(disposeBag)
   }
   
-  func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-    return europeanChocolates.count
+  private func setupCellTapHandling() {
+    tableView
+      .rx
+      .modelSelected(Chocolate.self)
+      .subscribe(onNext: {
+        chocolate in
+        ShoppingCart.sharedCart.chocolates.value.append(chocolate)
+        
+        if let selectedRowIndexPath = self.tableView.indexPathForSelectedRow {
+          self.tableView.deselectRow(at: selectedRowIndexPath, animated: true)
+        }
+      })
+      .addDisposableTo(disposeBag)
   }
   
-  func tableView(_ tableView: UITableView, canEditRowAt indexPath: IndexPath) -> Bool {
-    return false
-  }
-  
-  func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-    guard let cell = tableView.dequeueReusableCell(withIdentifier: ChocolateCell.Identifier, for: indexPath) as? ChocolateCell else {
-      //Something went wrong with the identifier.
-      return UITableViewCell()
-    }
-    
-    let chocolate = europeanChocolates[indexPath.row]
-    cell.configureWithChocolate(chocolate: chocolate)
-    
-    return cell
-  }
-}
-
-// MARK: - Table view delegate
-extension ChocolatesOfTheWorldViewController: UITableViewDelegate {
-
-  func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
-    tableView.deselectRow(at: indexPath, animated: true)
-    
-    let chocolate = europeanChocolates[indexPath.row]
-    ShoppingCart.sharedCart.chocolates.value.append(chocolate)
-  }
 }
 
 // MARK: - SegueHandler
