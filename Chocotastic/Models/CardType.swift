@@ -38,7 +38,7 @@ enum CardType {
     }
     
     guard string.rw_allCharactersAreNumbers() else {
-      assertionFailure("One of these characters is not a number!")
+//      assertionFailure("One of these characters is not a number!")
       return .Unknown
     }
     

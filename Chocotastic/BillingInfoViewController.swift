@@ -33,6 +33,8 @@ class BillingInfoViewController: UIViewController {
   @IBOutlet private var purchaseButton: UIButton!
   
   private let cardType: Variable<CardType> = Variable(.Unknown)
+  let disposeBag = DisposeBag()
+  private let throttleInterval = 0.1
   
   //MARK: - View Lifecycle
   
@@ -40,7 +42,8 @@ class BillingInfoViewController: UIViewController {
     super.viewDidLoad()
     
     title = "💳 Info"
-    
+    setupCardImageDisplay()
+    setupTextChangeHandling()
   }
   
   override func prepare(for segue: UIStoryboardSegue, sender: Any?) {
@@ -58,6 +61,56 @@ class BillingInfoViewController: UIViewController {
   
   //MARK: - RX Setup
 
+  private func setupCardImageDisplay() {
+    cardType
+      .asObservable()
+      .subscribe(onNext: {
+        cardType in
+        self.creditCardImageView.image = cardType.image
+      })
+      .addDisposableTo(disposeBag)
+  }
+  
+  private func setupTextChangeHandling() {
+    let creditCardValid = creditCardNumberTextField
+      .rx
+      .text
+      .throttle(throttleInterval, scheduler: MainScheduler.instance)
+      .map { self.validate(cardText: $0!) }
+    
+    creditCardValid
+      .subscribe(onNext: { self.creditCardNumberTextField.valid = $0 })
+      .addDisposableTo(disposeBag)
+    
+    let expirationValid = expirationDateTextField
+      .rx
+      .text
+      .throttle(throttleInterval, scheduler: MainScheduler.instance)
+      .map { self.validate(expirationDateText: $0!) }
+    
+    expirationValid
+      .subscribe(onNext: { self.expirationDateTextField.valid = $0 })
+      .addDisposableTo(disposeBag)
+    
+    let cvvValid = cvvTextField
+      .rx
+      .text
+      .map { self.validate(cvvText: $0!) }
+    
+    cvvValid
+      .subscribe(onNext: { self.cvvTextField.valid = $0 })
+      .addDisposableTo(disposeBag)
+    
+    let everythingValid = Observable
+      .combineLatest(creditCardValid, expirationValid, cvvValid) {
+        $0 && $1 && $2 //All must be true
+    }
+    
+    everythingValid
+      .bind(to:purchaseButton.rx.isEnabled)
+      .addDisposableTo(disposeBag)
+  }
+  
   
 
   //MARK: - Validation methods
@@ -110,23 +163,23 @@ class BillingInfoViewController: UIViewController {
     creditCardNumberTextField.text = self.cardType.value.format(noSpaces: noSpacesCardNumber)
   }
   
-  func advanceIfNecessary(noSpacesCardNumber: String) {
+  private func advanceIfNecessary(noSpacesCardNumber: String) {
     if noSpacesCardNumber.characters.count == self.cardType.value.expectedDigits {
       self.expirationDateTextField.becomeFirstResponder()
     }
   }
   
-  func formatExpirationDate(using expirationNoSpacesOrSlash: String) {
+  private func formatExpirationDate(using expirationNoSpacesOrSlash: String) {
     expirationDateTextField.text = expirationNoSpacesOrSlash.rw_addSlash()
   }
   
-  func advanceIfNecessary(expirationNoSpacesOrSlash: String) {
+  private func advanceIfNecessary(expirationNoSpacesOrSlash: String) {
     if expirationNoSpacesOrSlash.characters.count == 6 { //mmyyyy
       self.cvvTextField.becomeFirstResponder()
     }
   }
   
-  func dismissIfNecessary(cvv: String) {
+  private func dismissIfNecessary(cvv: String) {
     if cvv.characters.count == self.cardType.value.cvvDigits {
       let _ = self.cvvTextField.resignFirstResponder()
     }
